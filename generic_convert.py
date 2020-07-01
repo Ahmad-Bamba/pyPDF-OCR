@@ -54,7 +54,10 @@ Saves a list of images to "images/namingX.JPEG" where X is the 0 indexed page
 number.
 """
 def dumpImagePages(pages, naming="page"):
-    os.makedirs("images")
+    try:
+        os.makedirs("images")
+    except FileExistsError:
+        print("INFO: images/ already exits. Continuing...")
     for i in range(len(pages)):
         pages[i].save("images/" + naming + str(i) + ".JPEG", "JPEG")
 
