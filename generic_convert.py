@@ -130,6 +130,7 @@ voterID, name, fathers_name, house_no, age and sex.
 def extractTable1(text_pages, start_index = 0, end_index = 0):
     start = start_index
     end = end_index + 1 if end_index != 0 else len(text_pages)
+    # TODO: some regular expression here
 
 
 if __name__ == "__main__":
