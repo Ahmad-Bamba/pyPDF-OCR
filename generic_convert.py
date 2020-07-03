@@ -10,6 +10,11 @@ from pdf2image import convert_from_path
 import os
 from enum import Enum
 import pandas as pd
+from PyPDF2 import PdfFileReader
+import tempfile
+import re
+
+OUTPUT_PAGE_LIMIT = 5
 
 """An enum that determines the token type (explained below)
 """
@@ -36,30 +41,63 @@ class Token:
     def getData(self):
         return self.getData
 
-"""Returns a list of images
+"""Returns a temporary directory filled with processed images and PIL Image
+objects.
 
-Expects a PDF file at path. Applies a high contrast filter.
+Takes in the path to the pdf to process, and icnreases
 """
 def getImagePages(path):
-    images = convert_from_path(path)
+    global OUTPUT_PAGE_LIMIT
+
+    dir = tempfile.TemporaryDirectory(dir = os.getcwd())
     res = []
-    for img in images:
-        enhancer = ImageEnhance.Contrast(img)
-        res.append(enhancer.enhance(3.5))
-    return res
+    pdf = PdfFileReader(open(path,'rb'))
+    max_pages = pdf.getNumPages()
+    for page in range(0, max_pages, OUTPUT_PAGE_LIMIT):
+        res += convert_from_path(path,
+                                 dpi=300,
+                                 first_page = page,
+                                 last_page = min(page + OUTPUT_PAGE_LIMIT - 1, max_pages),
+                                 output_folder = dir.name)
+    return {"tempdir": dir, "images": res}
+
+
+"""Returns None
+
+Takes an object created by getImagePages and closes
+"""
+def cleanupImageOutput(images_obj):
+    for image in images_obj["images"]:
+        image.close()
+    images_obj["tempdir"].cleanup()
 
 """Returns None
 
 Saves a list of images to "images/namingX.JPEG" where X is the 0 indexed page
 number.
 """
-def dumpImagePages(pages, naming="page"):
+def dumpImagePages(pages_obj, naming="page"):
     try:
         os.makedirs("images")
     except FileExistsError:
         print("INFO: images/ already exits. Continuing...")
+    for i in range(len(pages_obj["images"])):
+        pages_obj["images"][i].save("images/" + naming + str(i) + ".JPEG", "JPEG")
+
+
+"""Returns None
+
+Save a list of raw text to a list of .txt files in plaintext/namingX.text
+"""
+def dumpTextPages(pages, naming="page"):
+    try:
+        os.makedirs("plaintext")
+    except FileExistsError:
+        print("INFO: plaintext/ already exists. Continuing...")
     for i in range(len(pages)):
-        pages[i].save("images/" + naming + str(i) + ".JPEG", "JPEG")
+        writefile = open("plaintext/" + naming + str(i) + ".txt", "w+")
+        writefile.write(pages[i])
+        writefile.close()
 
 
 """Returns list of strings
@@ -67,11 +105,12 @@ def dumpImagePages(pages, naming="page"):
 Takes a list of images and returns one string of text per page in a list.
 Looks for images in "folder" named "naming"X."extension" until numPages -1.
 """
-def extractPagesText(folder="images", naming="page", extension="JPEG", numPages=1):
+def extractPagesText(folder="images", naming="page", extension="JPEG", language='eng', numPages=1):
+    print("Performing language {}".format(language))
     res = []
     for i in range(numPages):
         filename = folder + "/" + naming + str(i) + "." + extension
-        text = str(((pytesseract.image_to_string(Image.open(filename)))))
+        text = str(((pytesseract.image_to_string(Image.open(filename), lang=language))))
         res.append(text)
     return res
 
@@ -80,11 +119,37 @@ def extractPagesText(folder="images", naming="page", extension="JPEG", numPages=
 Input is a string of text.
 """
 def getTokensFromPageText(text):
-    # TODO: Regex, probably.
+    # TODO: Regex, probably. We'll hold off on this idea for now.
     return None
+
+"""Returns a pandas dataframe.
+
+Between the specified start and end pages, this function looks for the variables:
+voterID, name, fathers_name, house_no, age and sex.
+"""
+def extractTable1(text_pages, start_index = 0, end_index = 0):
+    start = start_index
+    end = end_index + 1 if end_index != 0 else len(text_pages)
 
 
 if __name__ == "__main__":
+    print("Running LoremIpsum.pdf")
     lorem_ipsum_pages = getImagePages("test_files/LoremIpsum.pdf")
     dumpImagePages(lorem_ipsum_pages)
-    print(extractPagesText(numPages=3))
+    text_pages = extractPagesText(numPages=3)
+    dumpTextPages(text_pages)
+
+    #print("Running english.pdf")
+    #english_pages = getImagePages("test_files/english.pdf")
+    #dumpImagePages(english_pages, naming="en-page")
+    #en_text_pages = extractPagesText(numPages=6, naming="en-page")
+    #dumpTextPages(en_text_pages, naming="en-page")
+
+    print("Running hindi.pdf")
+    hindi_pages = getImagePages("test_files/hindi.pdf")
+    dumpImagePages(hindi_pages, naming="hin-page")
+    hin_text_pages = extractPagesText(numPages=3, naming="hin-page", language="hin")
+    dumpTextPages(hin_text_pages, naming="hin-page")
+
+    cleanupImageOutput(lorem_ipsum_pages)
+    cleanupImageOutput(english_pages)
