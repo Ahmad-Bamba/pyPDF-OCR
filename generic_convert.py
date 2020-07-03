@@ -103,12 +103,12 @@ def dumpTextPages(pages, naming="page"):
 """Returns list of strings
 
 Takes a list of images and returns one string of text per page in a list.
-Looks for images in "folder" named "naming"X."extension" until numPages -1.
+Looks for images in "folder" named "naming"X."extension" until num_pages -1.
 """
-def extractPagesText(folder="images", naming="page", extension="JPEG", language='eng', numPages=1):
+def extractPagesText(folder="images", naming="page", extension="JPEG", language='eng', num_pages=1):
     print("Performing language {}".format(language))
     res = []
-    for i in range(numPages):
+    for i in range(num_pages):
         filename = folder + "/" + naming + str(i) + "." + extension
         text = str(((pytesseract.image_to_string(Image.open(filename), lang=language))))
         res.append(text)
@@ -136,20 +136,23 @@ if __name__ == "__main__":
     print("Running LoremIpsum.pdf")
     lorem_ipsum_pages = getImagePages("test_files/LoremIpsum.pdf")
     dumpImagePages(lorem_ipsum_pages)
-    text_pages = extractPagesText(numPages=3)
+    text_pages = extractPagesText(num_pages=3)
     dumpTextPages(text_pages)
 
     #print("Running english.pdf")
     #english_pages = getImagePages("test_files/english.pdf")
     #dumpImagePages(english_pages, naming="en-page")
-    #en_text_pages = extractPagesText(numPages=6, naming="en-page")
+    #en_text_pages = extractPagesText(num_pages=6, naming="en-page")
     #dumpTextPages(en_text_pages, naming="en-page")
 
     print("Running hindi.pdf")
     hindi_pages = getImagePages("test_files/hindi.pdf")
     dumpImagePages(hindi_pages, naming="hin-page")
-    hin_text_pages = extractPagesText(numPages=3, naming="hin-page", language="hin")
+    hin_text_pages = extractPagesText(num_pages=3, naming="hin-page", language="hin")
+    en_test_text_pages = extractPagesText(num_pages=3, naming="hin-page", language="eng")
     dumpTextPages(hin_text_pages, naming="hin-page")
+    dumpTextPages(en_test_text_pages, naming="ehin-page")
 
     cleanupImageOutput(lorem_ipsum_pages)
-    cleanupImageOutput(english_pages)
+    # cleanupImageOutput(english_pages)
+    cleanupImageOutput(hindi_pages)
