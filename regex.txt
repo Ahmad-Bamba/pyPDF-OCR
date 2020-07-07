@@ -1,0 +1,17 @@
+Code for grabbing names (2 strings of hindi separated by a single space):
+ - ([\x{090}-\x{097F}]+ [\x{090}-\x{097F})]+)
+
+ Code for identifying a husband or father name:
+ - (?:पिता|पति) का नाम\s*:?\s*
+
+Code for identifying elector name 
+ - निर्वाचक का नाम\s*
+
+ Code for identifying ID (en)
+ - (BR\/\d{2}\/\d{3}\/\d{6}|[A-Z]{3}\d{7})
+
+ Code for identifying age
+ - उम्र\s*:\s*(\d{1,3})
+
+Code for identifying house number
+- गृह संख्या\s*:\s*(\d{1,4})

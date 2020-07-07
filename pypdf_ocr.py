@@ -14,7 +14,22 @@ from PyPDF2 import PdfFileReader
 import tempfile
 import re
 
+# Globals
+
+# Memory management
 OUTPUT_PAGE_LIMIT = 5
+
+# Regular Expressions
+SEARCH_NAME = r"([\x{090}-\x{097F}]+ [\x{090}-\x{097F})]+)"
+SEARCH_FAMILY = r"(?:पिता|पति) का नाम\s*:?\s*"
+SEARCH_ELECTOR = r"निर्वाचक का नाम\s*"
+SEARCH_ID = r"(BR\/\d{2}\/\d{3}\/\d{6}|[A-Z]{3}\d{7})"
+SEARCH_AGE = r"उम्र\s*:\s*(\d{1,3})"
+SEARCH_HOUSE = r"गृह संख्या\s*:\s*(\d{1,4})"
+
+#dataTable1
+COLUMN_NAMES1 = ["VoterID", "Name", "Age", "Sex", "HouseNum", "Family"]
+
 
 """An enum that determines the token type (explained below)
 """
@@ -105,12 +120,14 @@ def dumpTextPages(pages, naming="page"):
 Takes a list of images and returns one string of text per page in a list.
 Looks for images in "folder" named "naming"X."extension" until num_pages -1.
 """
-def extractPagesText(folder="images", naming="page", extension="JPEG", language='eng', num_pages=1):
+def extractPagesText(folder="images", naming="page", extension="JPEG", language='eng', num_pages=1, clist="", psm=3):
+    clist = "-c " + clist if clist != "" else clist
     print("Performing language {}".format(language))
     res = []
     for i in range(num_pages):
         filename = folder + "/" + naming + str(i) + "." + extension
-        text = str(((pytesseract.image_to_string(Image.open(filename), lang=language))))
+        text = str(((pytesseract.image_to_string(Image.open(filename), 
+            lang=language, config='--psm ' + str(psm) + " " + clist))))
         res.append(text)
     return res
 
@@ -122,12 +139,14 @@ def getTokensFromPageText(text):
     # TODO: Regex, probably. We'll hold off on this idea for now.
     return None
 
-"""Returns a pandas dataframe.
+"""Returns a list of Pandas Dataframes
 
 Between the specified start and end pages, this function looks for the variables:
 voterID, name, fathers_name, house_no, age and sex.
 """
 def extractTable1(text_pages, start_index = 0, end_index = 0):
+
+
     start = start_index
     end = end_index + 1 if end_index != 0 else len(text_pages)
     # TODO: some regular expression here
@@ -149,10 +168,14 @@ if __name__ == "__main__":
     print("Running hindi.pdf")
     hindi_pages = getImagePages("test_files/hindi.pdf")
     dumpImagePages(hindi_pages, naming="hin-page")
-    hin_text_pages = extractPagesText(num_pages=3, naming="hin-page", language="hin")
-    en_test_text_pages = extractPagesText(num_pages=3, naming="hin-page", language="eng")
+    hin_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="hin", psm=4,
+        clist="tessedit_char_blacklist=॥")
+    en_test_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="eng",
+        clist="tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:/")
     dumpTextPages(hin_text_pages, naming="hin-page")
     dumpTextPages(en_test_text_pages, naming="ehin-page")
+
+
 
     cleanupImageOutput(lorem_ipsum_pages)
     # cleanupImageOutput(english_pages)
