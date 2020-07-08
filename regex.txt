@@ -15,3 +15,6 @@ Code for identifying elector name
 
 Code for identifying house number
 - गृह संख्या\s*:\s*(\d{1,4})
+
+Code for identifying sex
+- लिंग\s*:\s*(महिला|पुरूष)

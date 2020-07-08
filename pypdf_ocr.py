@@ -13,6 +13,7 @@ import pandas as pd
 from PyPDF2 import PdfFileReader
 import tempfile
 import re
+import numpy as np
 
 # Globals
 
@@ -20,12 +21,12 @@ import re
 OUTPUT_PAGE_LIMIT = 5
 
 # Regular Expressions
-SEARCH_NAME = r"([\x{090}-\x{097F}]+ [\x{090}-\x{097F})]+)"
 SEARCH_FAMILY = r"(?:पिता|पति) का नाम\s*:?\s*"
 SEARCH_ELECTOR = r"निर्वाचक का नाम\s*"
 SEARCH_ID = r"(BR\/\d{2}\/\d{3}\/\d{6}|[A-Z]{3}\d{7})"
 SEARCH_AGE = r"उम्र\s*:\s*(\d{1,3})"
 SEARCH_HOUSE = r"गृह संख्या\s*:\s*(\d{1,4})"
+SEARCH_SEX = r"लिंग\s*:\s*(महिला|पुरूष)"
 
 #dataTable1
 COLUMN_NAMES1 = ["VoterID", "Name", "Age", "Sex", "HouseNum", "Family"]
@@ -139,17 +140,123 @@ def getTokensFromPageText(text):
     # TODO: Regex, probably. We'll hold off on this idea for now.
     return None
 
-"""Returns a list of Pandas Dataframes
+"""Returns a list
+
+x is a list, to is a length (positive integer), and val is any value.
+
+Fills a list in with the specified value if the length is less than the argument.
+"""
+def fillListTo(x, to, val):
+    if len(x) < to:
+        for i in range(to - len(x)):
+            x.append(val)
+    return x
+
+"""Returns a string
+
+Returns a string with every hindi unicode character in it to work with 
+python re. Not sure why re doesn't work like any other regex engine but 
+whatever.
+"""
+def getHindiAlphabet():
+    string = ""
+    for i in range(0x0900, 0x0980):
+        string += chr(i)
+    return string
+
+
+"""Returns a list of lists of Pandas Dataframes
 
 Between the specified start and end pages, this function looks for the variables:
 voterID, name, fathers_name, house_no, age and sex.
-"""
-def extractTable1(text_pages, start_index = 0, end_index = 0):
 
+Somewhat limited -- expects that hindi_text and english_text were parsed
+from the same source and are ordered in the same way. Standard electoral roll
+of Bihar.
+
+The code creates 30 slots to fill in DataFrame information. If less than thirty 
+slots are found those DataFrames will be empty. The list reads left to right
+top to bottom.
+
+It also expects the english to be ordered column first, and the hindi to be
+ordered row first. It's all hard-coded.
+
+Skips the whole token idea. One list per page between start_index and
+end_index.
+"""
+def extractTable1(hindi_text, english_text, start_index = 0, end_index = 0):
+    global SEARCH_FAMILY
+    global SEARCH_ELECTOR
+    global SEARCH_ID
+    global SEARCH_AGE
+    global SEARCH_HOUSE
+    global SEARCH_SEX
+    global COLUMN_NAMES1
+
+    SEARCH_NAME = r"([" + getHindiAlphabet() + r"]+ " + r"[" + getHindiAlphabet() + r"]+)"
+
+    elector_name_pattern = re.compile(SEARCH_ELECTOR + SEARCH_NAME)
+    family_name_pattern = re.compile(SEARCH_FAMILY + SEARCH_NAME)
+    voterid_pattern = re.compile(SEARCH_ID)
+    age_pattern = re.compile(SEARCH_AGE)
+    house_pattern = re.compile(SEARCH_HOUSE)
+    sex_pattern = re.compile(SEARCH_SEX)
 
     start = start_index
     end = end_index + 1 if end_index != 0 else len(text_pages)
-    # TODO: some regular expression here
+    res = []
+
+    for i in range(start, end):
+        thispage_entries = []
+        
+        thisenglish = english_text[i]
+        thishindi = hindi_text[i]
+
+        # these are in the "correct" order (left to right)
+        # these all need to be the same size so we can make the dataframe
+        elector_match_list = re.findall(elector_name_pattern, thishindi)
+        elector_match_list = fillListTo(elector_match_list, 30, "")
+
+        family_match_list = re.findall(family_name_pattern, thishindi)
+        family_match_list = fillListTo(family_match_list, 30, "")
+
+        # age we auto-convert to a number because we can
+        age_match_list = re.findall(age_pattern, thishindi)
+        age_match_list = fillListTo(age_match_list, 30, "")
+        age_match_list = [int(age) for age in age_match_list]
+
+        house_match_list = re.findall(house_pattern, thishindi)
+        house_match_list = fillListTo(house_match_list, 30, "")
+
+        sex_match_list = re.findall(sex_pattern, thishindi)
+        sex_match_list = fillListTo(sex_match_list, 30, "")
+
+        _voterid_match_list = re.findall(voterid_pattern, thisenglish)
+        _voterid_match_list = fillListTo(_voterid_match_list, 30, "")
+
+        # these come column first and are therefore wrong and bad
+        # but we can fix that :)
+        voterid_match_list = []
+        for j in range(10):
+            voterid_match_list.append(_voterid_match_list[j])
+            voterid_match_list.append(_voterid_match_list[j + 10])
+            voterid_match_list.append(_voterid_match_list[j + 10 * 2])
+
+        for j in range(30):
+            entry = {
+                "VoterID": voterid_match_list[j],
+                "Name": elector_match_list[j],
+                "Age": age_match_list[j],
+                "Sex": sex_match_list[j],
+                "HouseNum": house_match_list[j],
+                "Family": family_match_list[j]
+            }
+            thispage_entries.append(entry)
+        
+        thispage = pd.DataFrame(columns = COLUMN_NAMES1, data = thispage_entries) 
+        res.append(thispage)
+    
+    return res
 
 
 if __name__ == "__main__":
@@ -170,13 +277,15 @@ if __name__ == "__main__":
     dumpImagePages(hindi_pages, naming="hin-page")
     hin_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="hin", psm=4,
         clist="tessedit_char_blacklist=॥")
-    en_test_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="eng",
+    en_text_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="eng",
         clist="tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:/")
     dumpTextPages(hin_text_pages, naming="hin-page")
-    dumpTextPages(en_test_text_pages, naming="ehin-page")
-
-
+    dumpTextPages(en_text_text_pages, naming="ehin-page")
 
     cleanupImageOutput(lorem_ipsum_pages)
     # cleanupImageOutput(english_pages)
     cleanupImageOutput(hindi_pages)
+
+    print("Converting to dataframe...")
+    dataframes = extractTable1(hin_text_pages, en_text_text_pages, 2)
+    print(dataframes[0].head())
