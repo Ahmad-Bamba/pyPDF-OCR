@@ -13,7 +13,7 @@ import pandas as pd
 from PyPDF2 import PdfFileReader
 import tempfile
 import re
-import numpy as np
+import json
 
 # Globals
 
@@ -21,12 +21,30 @@ import numpy as np
 OUTPUT_PAGE_LIMIT = 5
 
 # Regular Expressions
-SEARCH_FAMILY = r"(?:पिता|पति) का नाम\s*:?\s*"
+SEARCH_FAMILY = r"(?:पिता|पति) का नाम\s*(?:४|:|न)?\s*"
 SEARCH_ELECTOR = r"निर्वाचक का नाम\s*"
 SEARCH_ID = r"(BR\/\d{2}\/\d{3}\/\d{6}|[A-Z]{3}\d{7})"
-SEARCH_AGE = r"उम्र\s*:\s*(\d{1,3})"
-SEARCH_HOUSE = r"गृह संख्या\s*:\s*(\d{1,4})"
-SEARCH_SEX = r"लिंग\s*:\s*(महिला|पुरूष)"
+SEARCH_AGE = r"उम्र\s*(?:४|:|न)?\s*(\d{1,3})"
+SEARCH_HOUSE = r"गृह संख्या\s*(?:४|:|न)?\s*(\d{1,4})"
+SEARCH_SEX = r"लिंग\s*(?:४|:|न)?\s*(महिला|पुरूष)"
+
+SEARCH_AC = r"विधान सभा क्षेत्र की संख्या\s*,\s*नाम व आरक्षण स्थिति\s*:\s*(\d+)[\s\"&\-'“”‘’?!.:,#*|]*"
+SEARCH_PART = r"संख्या\s*:\s*(\d+)"
+SEARCH_PC = r"लोक सभा क्षेत्र की संख्या\s*,\s*नाम व आरक्षण स्थिति\s*:\s*(\d+)[\s\"&\-'“”‘’?!.:,#*|]*"
+SEARCH_SUBPART = r"\(\d+\)\s*"
+SEARCH_VILLAGE = r"मुख्य ग्राम\s*(?:४|:|न)?\s*"
+SEARCH_POST_OFFICE = r"डाकघर\s*(?:४|:|न)?\s*"
+SEARCH_POLICE = r"थाना\s*(?:४|:|न)?\s*"
+SEARCH_RAJASVA_HALKA = r"राजस्व हलका\s*(?:४|:|न)?\s*((?:\d{3})+)"
+SEARCH_PANCHAYAT = r"पंचायत\s*(?:४|:|न)?\s*"
+SEARCH_ANCHAL = r"अंचल ु\s*(?:४|:|न)?\s*"
+SEARCH_PRAKHAND = r"प्रखंड\s*(?:४|:|न)?\s*"
+SEARCH_ANUMANDAL = r"अनूमंडल\s*(?:४|:|न)?\s*"
+SEARCH_DISTRICT = r"जिला\s*(?:४|:|न)?\s*"
+SEARCH_ZIP = r"पिन कोड\s*(?:४|:|न)?\s*\.*\s*(\d{6})"
+SEARCH_POLLING_BOOTH = r"मतदान केन्द्र की संख्या व नाम\s*(?:४|:|न)?\s*\d+[.,\s]*"
+
+
 
 #dataTable1
 COLUMN_NAMES1 = ["VoterID", "Name", "Age", "Sex", "HouseNum", "Family"]
@@ -103,15 +121,16 @@ def dumpImagePages(pages_obj, naming="page"):
 
 """Returns None
 
-Save a list of raw text to a list of .txt files in plaintext/namingX.text
+Save a list of raw text to a list of plaintext files in plaintext/namingX.text
+The extension is adjustable with the extension parameter.
 """
-def dumpTextPages(pages, naming="page"):
+def dumpTextPages(pages, naming="page", extension="txt"):
     try:
         os.makedirs("plaintext")
     except FileExistsError:
         print("INFO: plaintext/ already exists. Continuing...")
     for i in range(len(pages)):
-        writefile = open("plaintext/" + naming + str(i) + ".txt", "w+")
+        writefile = open("plaintext/" + naming + str(i) + "." + extension, "w+")
         writefile.write(pages[i])
         writefile.close()
 
@@ -195,12 +214,12 @@ def extractTable1(hindi_text, english_text, start_index = 0, end_index = 0):
 
     SEARCH_NAME = r"([" + getHindiAlphabet() + r"]+ " + r"[" + getHindiAlphabet() + r"]+)"
 
-    elector_name_pattern = re.compile(SEARCH_ELECTOR + SEARCH_NAME)
-    family_name_pattern = re.compile(SEARCH_FAMILY + SEARCH_NAME)
-    voterid_pattern = re.compile(SEARCH_ID)
-    age_pattern = re.compile(SEARCH_AGE)
-    house_pattern = re.compile(SEARCH_HOUSE)
-    sex_pattern = re.compile(SEARCH_SEX)
+    elector_name_pattern = re.compile(SEARCH_ELECTOR + SEARCH_NAME, re.UNICODE)
+    family_name_pattern = re.compile(SEARCH_FAMILY + SEARCH_NAME, re.UNICODE)
+    voterid_pattern = re.compile(SEARCH_ID, re.UNICODE)
+    age_pattern = re.compile(SEARCH_AGE, re.UNICODE)
+    house_pattern = re.compile(SEARCH_HOUSE, re.UNICODE)
+    sex_pattern = re.compile(SEARCH_SEX, re.UNICODE)
 
     start = start_index
     end = end_index + 1 if end_index != 0 else len(text_pages)
@@ -259,12 +278,183 @@ def extractTable1(hindi_text, english_text, start_index = 0, end_index = 0):
     return res
 
 
+"""Returns a dictionary
+
+This function is to be used to parse the first page of Bihar electoral rolls.
+It expects a string of the hindi-parsed data. Dictionary contains
+
+ - AC number
+ - Part
+ - PC number
+ - Subpart
+ - Village
+ - Post office
+ - Police
+ - Rajasva Halka
+ - Panchayat
+ - Anchal
+ - Prakhand
+ - District
+ - Zip code
+ - Polling booth
+"""
+def extractPage1(page_one_text):
+    global SEARCH_AC
+    global SEARCH_PC
+    global SEARCH_PART
+    global SEARCH_SUBPART
+    global SEARCH_VILLAGE
+    global SEARCH_POLICE
+    global SEARCH_POST_OFFICE
+    global SEARCH_PRAKHAND
+    global SEARCH_ANUMANDAL
+    global SEARCH_DISTRICT
+    global SEARCH_POLLING_BOOTH
+
+    alpha = getHindiAlphabet()
+    alpha_ = alpha + " "
+    alphanum = alpha_ + "0123456789"
+
+    # build regex strings
+    SEARCH_AC_STR = SEARCH_AC + r"([" + alpha + "]+)" + r"\s*-\s*([" + alpha + "]+)"
+    SEARCH_PC_STR = SEARCH_PC + r"([" + alpha + "]+)" + r"\s*-\s*([" + alpha + "]+)"
+    SEARCH_SUBPART_STR = SEARCH_SUBPART + r"([" + alpha_ + r"]+)"
+    SEARCH_VILLAGE_STR = SEARCH_VILLAGE + r"([" + alpha_ + r"]+)"
+    SEARCH_POST_OFFICE_STR = SEARCH_POST_OFFICE + r"([" + alpha_ + r"]+)"
+    SEARCH_POLICE_STR = SEARCH_POLICE + r"([" + alpha_ + r"]+)"
+    SEARCH_PANCHAYAT_STR = SEARCH_PANCHAYAT + r"([" + alpha_ + r"]+)"
+    SEARCH_ANCHAL_STR = SEARCH_ANCHAL + r"([" + alphanum + r"]+)"
+    SEARCH_PRAKHAND_STR = SEARCH_PRAKHAND + r"([" + alphanum + r"]+)"
+    SEARCH_ANUMANDAL_STR = SEARCH_ANUMANDAL + r"([" + alpha_ + r"]+)"
+    SEARCH_DISTRICT_STR = SEARCH_DISTRICT + r"([" + alpha_ + r"]+)"
+    SEARCH_POLLING_BOOTH_STR = SEARCH_POLLING_BOOTH + r"([" + alpha_ + r"]+\s*,\s*[" + alpha_ + r"]+)"
+
+    # these ones don't change
+    SEARCH_ZIP_STR = SEARCH_ZIP
+    SEARCH_RAJASVA_HALKA_STR = SEARCH_RAJASVA_HALKA
+    SEARCH_PART_STR = SEARCH_PART
+
+    # okay time to search
+    ac_pattern = re.compile(SEARCH_AC_STR, re.UNICODE)
+    part_pattern = re.compile(SEARCH_PART_STR, re.UNICODE)
+    pc_pattern = re.compile(SEARCH_PC_STR, re.UNICODE)
+    village_pattern = re.compile(SEARCH_VILLAGE_STR, re.UNICODE)
+    post_office_pattern = re.compile(SEARCH_POST_OFFICE_STR, re.UNICODE)
+    police_pattern = re.compile(SEARCH_POLICE_STR, re.UNICODE)
+    rajasva_halka_pattern = re.compile(SEARCH_RAJASVA_HALKA_STR, re.UNICODE)
+    panchayat_pattern = re.compile(SEARCH_PANCHAYAT_STR, re.UNICODE)
+    prakhand_pattern = re.compile(SEARCH_PRAKHAND_STR, re.UNICODE)
+    district_pattern = re.compile(SEARCH_DISTRICT_STR, re.UNICODE)
+    anchal_pattern = re.compile(SEARCH_ANCHAL_STR, re.UNICODE)
+    zip_pattern = re.compile(SEARCH_ZIP_STR, re.UNICODE)
+    polling_pattern = re.compile(SEARCH_POLLING_BOOTH_STR, re.UNICODE)
+
+    # make the result
+    res = {
+        "Assembly Constituency": None,
+        "Part": None,
+        "Parlimentary Constituency": None,
+        "Village": None,
+        "Post Office": None,
+        "Police Station": None,
+        "Rajasva Halka": None,
+        "Panchayat": None,
+        "Anchal": None,
+        "Prakhand": None,
+        "District": None,
+        "Zip Code": None,
+        "Polling Booth": None
+    }
+
+    # run the searches
+    try:
+        ac_hit = re.search(ac_pattern, page_one_text)
+        res["Assembly Constituency"] = ac_hit.group(0)
+    except IndexError:
+        pass
+
+    try:
+        part_hit = re.search(part_pattern, page_one_text)
+        res["Part"] = part_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        pc_hit = re.search(pc_pattern, page_one_text)
+        res["Parlimentary Constituency"] = pc_hit.group(0)
+    except IndexError:
+        pass
+
+    try:
+        village_hit = re.search(village_pattern, page_one_text)
+        res["Village"] = village_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        post_office_hit = re.search(post_office_pattern, page_one_text)
+        res["Post Office"] = post_office_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        police_station_hit = re.search(police_pattern, page_one_text)
+        res["Police Station"] = police_station_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        rajasva_halka_hit = re.search(rajasva_halka_pattern, page_one_text)
+        res["Rajasva Halka"] = rajasva_halka_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        panchayat_hit = re.search(panchayat_pattern, page_one_text)
+        res["Panchayat"] = panchayat_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        anchal_hit = re.search(anchal_pattern, page_one_text)
+        res["Anchal"] = anchal_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        prakhand_hit = re.search(prakhand_pattern, page_one_text)
+        res["Prakhand"] = prakhand_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        district_hit = re.search(district_pattern, page_one_text)
+        res["District"] = district_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        zip_hit = re.search(zip_pattern, page_one_text)
+        res["Zip Code"] = zip_hit.group(1)
+    except IndexError:
+        pass
+
+    try:
+        polling_hit = re.search(polling_pattern, page_one_text)
+        res["Polling Booth"] = polling_hit.group(1)
+    except IndexError:
+        pass
+
+
+    return res
+  
+
 if __name__ == "__main__":
-    print("Running LoremIpsum.pdf")
-    lorem_ipsum_pages = getImagePages("test_files/LoremIpsum.pdf")
-    dumpImagePages(lorem_ipsum_pages)
-    text_pages = extractPagesText(num_pages=3)
-    dumpTextPages(text_pages)
+    #print("Running LoremIpsum.pdf")
+    #lorem_ipsum_pages = getImagePages("test_files/LoremIpsum.pdf")
+    #dumpImagePages(lorem_ipsum_pages)
+    #text_pages = extractPagesText(num_pages=3)
+    #dumpTextPages(text_pages)
 
     #print("Running english.pdf")
     #english_pages = getImagePages("test_files/english.pdf")
@@ -279,13 +469,21 @@ if __name__ == "__main__":
         clist="tessedit_char_blacklist=॥")
     en_text_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="eng",
         clist="tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:/")
-    dumpTextPages(hin_text_pages, naming="hin-page")
-    dumpTextPages(en_text_text_pages, naming="ehin-page")
-
-    cleanupImageOutput(lorem_ipsum_pages)
+    
+    # cleanupImageOutput(lorem_ipsum_pages)
     # cleanupImageOutput(english_pages)
     cleanupImageOutput(hindi_pages)
 
-    print("Converting to dataframe...")
-    dataframes = extractTable1(hin_text_pages, en_text_text_pages, 2)
-    print(dataframes[0].head())
+    dumpTextPages(hin_text_pages, naming="hin-page")
+    dumpTextPages(en_text_text_pages, naming="ehin-page")
+
+    print("Parsing page 1...")
+    page1 = extractPage1(hin_text_pages[0])
+    page1str = json.dumps(page1, ensure_ascii=False)
+
+    print(page1str)
+    dumpTextPages([page1str], naming="p1parsed", extension="json")
+
+    #print("Converting to dataframe...")
+    #dataframes = extractTable1(hin_text_pages, en_text_text_pages, 2)
+    #print(dataframes[0].head())
