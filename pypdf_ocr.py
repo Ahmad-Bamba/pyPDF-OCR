@@ -3,17 +3,18 @@
 # a token and charts of numbers will be a token as well.
 
 # Imports
-from PIL import Image, ImageEnhance
-import pytesseract
-import sys
 from pdf2image import convert_from_path
-import os
+from PIL import Image, ImageEnhance
+from PyPDF2 import PdfFileReader
 from enum import Enum
 import pandas as pd
-from PyPDF2 import PdfFileReader
+import pytesseract
 import tempfile
-import re
 import json
+import math
+import sys
+import os
+import re
 
 # Globals
 
@@ -31,7 +32,7 @@ SEARCH_SEX = r"लिंग\s*(?:४|:|न)?\s*(महिला|पुरूष)
 SEARCH_AC = r"विधान सभा क्षेत्र की संख्या\s*,\s*नाम व आरक्षण स्थिति\s*:\s*(\d+)[\s\"&\-'“”‘’?!.:,#*|]*"
 SEARCH_PART = r"संख्या\s*:\s*(\d+)"
 SEARCH_PC = r"लोक सभा क्षेत्र की संख्या\s*,\s*नाम व आरक्षण स्थिति\s*:\s*(\d+)[\s\"&\-'“”‘’?!.:,#*|]*"
-SEARCH_SUBPART = r"\(\d+\)\s*"
+SEARCH_SUBPART = r"\(\d\)\s*"
 SEARCH_VILLAGE = r"मुख्य ग्राम\s*(?:४|:|न)?\s*"
 SEARCH_POST_OFFICE = r"डाकघर\s*(?:४|:|न)?\s*"
 SEARCH_POLICE = r"थाना\s*(?:४|:|न)?\s*"
@@ -43,6 +44,7 @@ SEARCH_ANUMANDAL = r"अनूमंडल\s*(?:४|:|न)?\s*"
 SEARCH_DISTRICT = r"जिला\s*(?:४|:|न)?\s*"
 SEARCH_ZIP = r"पिन कोड\s*(?:४|:|न)?\s*\.*\s*(\d{6})"
 SEARCH_POLLING_BOOTH = r"मतदान केन्द्र की संख्या व नाम\s*(?:४|:|न)?\s*\d+[.,\s]*"
+SEARCH_POLLING_ADDR = r"मतदान केन्द्र का भवन व पता\s*"
 
 
 
@@ -222,7 +224,7 @@ def extractTable1(hindi_text, english_text, start_index = 0, end_index = 0):
     sex_pattern = re.compile(SEARCH_SEX, re.UNICODE)
 
     start = start_index
-    end = end_index + 1 if end_index != 0 else len(text_pages)
+    end = end_index + 1 if end_index != 0 else len(hindi_text)
     res = []
 
     for i in range(start, end):
@@ -297,6 +299,7 @@ It expects a string of the hindi-parsed data. Dictionary contains
  - District
  - Zip code
  - Polling booth
+ - Polling address
 """
 def extractPage1(page_one_text):
     global SEARCH_AC
@@ -310,6 +313,7 @@ def extractPage1(page_one_text):
     global SEARCH_ANUMANDAL
     global SEARCH_DISTRICT
     global SEARCH_POLLING_BOOTH
+    global SEARCH_POLLING_ADDR
 
     alpha = getHindiAlphabet()
     alpha_ = alpha + " "
@@ -328,6 +332,7 @@ def extractPage1(page_one_text):
     SEARCH_ANUMANDAL_STR = SEARCH_ANUMANDAL + r"([" + alpha_ + r"]+)"
     SEARCH_DISTRICT_STR = SEARCH_DISTRICT + r"([" + alpha_ + r"]+)"
     SEARCH_POLLING_BOOTH_STR = SEARCH_POLLING_BOOTH + r"([" + alpha_ + r"]+\s*,\s*[" + alpha_ + r"]+)"
+    SEARCH_POLLING_ADDR_STR = SEARCH_POLLING_ADDR + r"([" + alpha_ + r"]+\s*(?:,|\.)\s*[" + alpha + r"]+)"
 
     # these ones don't change
     SEARCH_ZIP_STR = SEARCH_ZIP
@@ -348,12 +353,15 @@ def extractPage1(page_one_text):
     anchal_pattern = re.compile(SEARCH_ANCHAL_STR, re.UNICODE)
     zip_pattern = re.compile(SEARCH_ZIP_STR, re.UNICODE)
     polling_pattern = re.compile(SEARCH_POLLING_BOOTH_STR, re.UNICODE)
+    subpart_pattern = re.compile(SEARCH_SUBPART_STR, re.UNICODE)
+    address_pattern = re.compile(SEARCH_POLLING_ADDR_STR, re.UNICODE)
 
     # make the result
     res = {
         "Assembly Constituency": None,
         "Part": None,
         "Parlimentary Constituency": None,
+        "Subpart": None,
         "Village": None,
         "Post Office": None,
         "Police Station": None,
@@ -363,13 +371,15 @@ def extractPage1(page_one_text):
         "Prakhand": None,
         "District": None,
         "Zip Code": None,
-        "Polling Booth": None
+        "Polling Booth": None,
+        "Polling Address": None,
+        "Sanity": None
     }
 
     # run the searches
     try:
         ac_hit = re.search(ac_pattern, page_one_text)
-        res["Assembly Constituency"] = ac_hit.group(0)
+        res["Assembly Constituency"] = list(ac_hit.groups())
     except IndexError:
         pass
 
@@ -381,7 +391,13 @@ def extractPage1(page_one_text):
 
     try:
         pc_hit = re.search(pc_pattern, page_one_text)
-        res["Parlimentary Constituency"] = pc_hit.group(0)
+        res["Parlimentary Constituency"] = list(pc_hit.groups())
+    except IndexError:
+        pass
+
+    try:
+        subpart_hit = re.search(subpart_pattern, page_one_text)
+        res["Subpart"] = subpart_hit.group(1)
     except IndexError:
         pass
 
@@ -445,9 +461,47 @@ def extractPage1(page_one_text):
     except IndexError:
         pass
 
+    try:
+        address_hit = re.search(address_pattern, page_one_text)
+        res["Polling Address"] = address_hit.group(1)
+    except IndexError:
+        pass
+
 
     return res
   
+
+"""Returns None
+
+Expects a single PIL image and an index and saves a cropped version of the
+image to images/cropped[i].JPEG
+"""
+def generateCropped(img, i, x, y, w, h):
+    cropped = img.crop((x, y, x + w, y + h))
+    cropped.save("images/cropped{}.JPEG".format(i))
+
+
+"""Returns a list
+
+Tries to look for [num_pages] filed named plaintext/cropped[i].txt
+and returns a list of the values each page contains.
+"""
+def retreiveCropped(num_pages):
+    res = []
+    for i in range(num_pages):
+        try:
+            f = open("plaintext/cropped{}.txt".format(i))
+            fstr = f.read()
+            try:
+                res.append(int(fstr))
+            except ValueError:
+                res.append(fstr)
+            f.close()
+        except Exception as err:
+            print("Unknown error: {}".format(err))
+            break
+    return res
+
 
 if __name__ == "__main__":
     #print("Running LoremIpsum.pdf")
@@ -469,6 +523,23 @@ if __name__ == "__main__":
         clist="tessedit_char_blacklist=॥")
     en_text_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="eng",
         clist="tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:/")
+
+    # generating cropped values
+    vals = {
+        "x": [246, 656, 1022, 1384, 1713, 2090],
+        "y": [3048, 3048, 3097, 3097, 3097, 3097],
+        "w": [60, 104, 80, 80, 109, 109],
+        "h": [60, 48, 37, 37, 39, 39]
+    }
+    for i in range(6):        
+        generateCropped(hindi_pages["images"][0], i, 
+            vals["x"][i],
+            vals["y"][i],
+            vals["w"][i],
+            vals["h"][i])
+
+    cropped_text_pages = extractPagesText(num_pages=6, naming="cropped", language="eng", psm=8,
+        clist="tessedit_char_whitelist=0123456789")
     
     # cleanupImageOutput(lorem_ipsum_pages)
     # cleanupImageOutput(english_pages)
@@ -476,9 +547,12 @@ if __name__ == "__main__":
 
     dumpTextPages(hin_text_pages, naming="hin-page")
     dumpTextPages(en_text_text_pages, naming="ehin-page")
+    dumpTextPages(cropped_text_pages, naming="cropped")
+
 
     print("Parsing page 1...")
     page1 = extractPage1(hin_text_pages[0])
+    page1["Sanity"] = retreiveCropped(6)
     page1str = json.dumps(page1, ensure_ascii=False)
 
     print(page1str)

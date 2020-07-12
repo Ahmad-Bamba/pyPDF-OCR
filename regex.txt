@@ -68,3 +68,6 @@ Code for recognizing zip code
 
 Code for recognizing polling booth name
 - मतदान केन्द्र की संख्या व नाम\s*(?:४|:|न)?\s*\d+[.,\s]*([\x{090}-\x{097F} ]+\s*,\s*[\x{090}-\x{097F}]+)
+
+Code for recognizing polling address
+- मतदान केन्द्र का भवन व पता\s*([\x{090}-\x{097F} ]+\s*(?:,|\.)\s*[\x{090}-\x{097F}]+)
