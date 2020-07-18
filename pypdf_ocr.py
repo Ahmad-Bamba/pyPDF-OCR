@@ -82,13 +82,13 @@ objects.
 
 Takes in the path to the pdf to process, and icnreases
 """
-def getImagePages(path):
+def getImagePages(path, limit=0):
     global OUTPUT_PAGE_LIMIT
 
     dir = tempfile.TemporaryDirectory(dir = os.getcwd())
     res = []
     pdf = PdfFileReader(open(path,'rb'))
-    max_pages = pdf.getNumPages()
+    max_pages = pdf.getNumPages() if limit <= 0 else limit
     for page in range(0, max_pages, OUTPUT_PAGE_LIMIT):
         res += convert_from_path(path,
                                  dpi=300,
@@ -486,9 +486,9 @@ def generateCropped(img, i, x, y, w, h):
 Tries to look for [num_pages] filed named plaintext/cropped[i].txt
 and returns a list of the values each page contains.
 """
-def retreiveCropped(num_pages):
+def retreiveCropped(num_pages, start=0):
     res = []
-    for i in range(num_pages):
+    for i in range(start, start + num_pages):
         try:
             f = open("plaintext/cropped{}.txt".format(i))
             fstr = f.read()
@@ -518,6 +518,7 @@ if __name__ == "__main__":
 
     print("Running hindi.pdf")
     hindi_pages = getImagePages("test_files/hindi.pdf")
+    print("Memory:{}".format(sys.getsizeof(hindi_pages)))
     dumpImagePages(hindi_pages, naming="hin-page")
     hin_text_pages = extractPagesText(num_pages=4, naming="hin-page", language="hin", psm=4,
         clist="tessedit_char_blacklist=॥")
@@ -531,8 +532,9 @@ if __name__ == "__main__":
         "w": [60, 104, 80, 80, 109, 109],
         "h": [60, 48, 37, 37, 39, 39]
     }
+    copy = hindi_pages["images"][0].copy()
     for i in range(6):        
-        generateCropped(hindi_pages["images"][0], i, 
+        generateCropped(copy, i, 
             vals["x"][i],
             vals["y"][i],
             vals["w"][i],
