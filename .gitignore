@@ -1,2 +1,3 @@
 images/*
 plaintext/*
+__pycache__/*

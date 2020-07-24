@@ -112,13 +112,13 @@ def cleanupImageOutput(images_obj):
 Saves a list of images to "images/namingX.JPEG" where X is the 0 indexed page
 number.
 """
-def dumpImagePages(pages_obj, naming="page"):
+def dumpImagePages(pages_obj, naming="page", start=0):
     try:
         os.makedirs("images")
     except FileExistsError:
         print("INFO: images/ already exits. Continuing...")
     for i in range(len(pages_obj["images"])):
-        pages_obj["images"][i].save("images/" + naming + str(i) + ".JPEG", "JPEG")
+        pages_obj["images"][i].save("images/" + naming + str(i + start) + ".JPEG", "JPEG")
 
 
 """Returns None
@@ -126,13 +126,13 @@ def dumpImagePages(pages_obj, naming="page"):
 Save a list of raw text to a list of plaintext files in plaintext/namingX.text
 The extension is adjustable with the extension parameter.
 """
-def dumpTextPages(pages, naming="page", extension="txt"):
+def dumpTextPages(pages, naming="page", directory="plaintext", extension="txt"):
     try:
-        os.makedirs("plaintext")
+        os.makedirs(directory)
     except FileExistsError:
-        print("INFO: plaintext/ already exists. Continuing...")
+        print("INFO: {} already exists. Continuing...".format(directory))
     for i in range(len(pages)):
-        writefile = open("plaintext/" + naming + str(i) + "." + extension, "w+")
+        writefile = open(directory + "/" + naming + str(i) + "." + extension, "w+")
         writefile.write(pages[i])
         writefile.close()
 
@@ -379,91 +379,106 @@ def extractPage1(page_one_text):
     # run the searches
     try:
         ac_hit = re.search(ac_pattern, page_one_text)
-        res["Assembly Constituency"] = list(ac_hit.groups())
+        if ac_hit is not None:
+            res["Assembly Constituency"] = list(ac_hit.groups())
     except IndexError:
         pass
 
     try:
         part_hit = re.search(part_pattern, page_one_text)
-        res["Part"] = part_hit.group(1)
+        if part_hit is not None:
+            res["Part"] = part_hit.group(1)
     except IndexError:
         pass
 
     try:
         pc_hit = re.search(pc_pattern, page_one_text)
-        res["Parlimentary Constituency"] = list(pc_hit.groups())
+        if pc_hit is not None:
+            res["Parlimentary Constituency"] = list(pc_hit.groups())
     except IndexError:
         pass
 
     try:
         subpart_hit = re.search(subpart_pattern, page_one_text)
-        res["Subpart"] = subpart_hit.group(1)
+        if subpart_hit is not None:
+            res["Subpart"] = subpart_hit.group(1)
     except IndexError:
         pass
 
     try:
         village_hit = re.search(village_pattern, page_one_text)
-        res["Village"] = village_hit.group(1)
+        if village_hit is not None:
+            res["Village"] = village_hit.group(1)
     except IndexError:
         pass
 
     try:
         post_office_hit = re.search(post_office_pattern, page_one_text)
-        res["Post Office"] = post_office_hit.group(1)
+        if post_office_hit is not None:
+            res["Post Office"] = post_office_hit.group(1)
     except IndexError:
         pass
 
     try:
         police_station_hit = re.search(police_pattern, page_one_text)
-        res["Police Station"] = police_station_hit.group(1)
+        if police_station_hit is not None:
+            res["Police Station"] = police_station_hit.group(1)
     except IndexError:
         pass
 
     try:
         rajasva_halka_hit = re.search(rajasva_halka_pattern, page_one_text)
-        res["Rajasva Halka"] = rajasva_halka_hit.group(1)
+        if rajasva_halka_hit is not None:
+            res["Rajasva Halka"] = rajasva_halka_hit.group(1)
     except IndexError:
         pass
 
     try:
         panchayat_hit = re.search(panchayat_pattern, page_one_text)
-        res["Panchayat"] = panchayat_hit.group(1)
+        if panchayat_hit is not None:
+            res["Panchayat"] = panchayat_hit.group(1)
     except IndexError:
         pass
 
     try:
         anchal_hit = re.search(anchal_pattern, page_one_text)
-        res["Anchal"] = anchal_hit.group(1)
+        if anchal_hit is not None:
+            res["Anchal"] = anchal_hit.group(1)
     except IndexError:
         pass
 
     try:
         prakhand_hit = re.search(prakhand_pattern, page_one_text)
-        res["Prakhand"] = prakhand_hit.group(1)
+        if prakhand_hit is not None:
+            res["Prakhand"] = prakhand_hit.group(1)
     except IndexError:
         pass
 
     try:
         district_hit = re.search(district_pattern, page_one_text)
-        res["District"] = district_hit.group(1)
+        if district_hit is not None:
+            res["District"] = district_hit.group(1)
     except IndexError:
         pass
 
     try:
         zip_hit = re.search(zip_pattern, page_one_text)
-        res["Zip Code"] = zip_hit.group(1)
+        if zip_hit is not None:
+            res["Zip Code"] = zip_hit.group(1)
     except IndexError:
         pass
 
     try:
         polling_hit = re.search(polling_pattern, page_one_text)
-        res["Polling Booth"] = polling_hit.group(1)
+        if polling_hit is not None:
+            res["Polling Booth"] = polling_hit.group(1)
     except IndexError:
         pass
 
     try:
         address_hit = re.search(address_pattern, page_one_text)
-        res["Polling Address"] = address_hit.group(1)
+        if address_hit is not None:
+            res["Polling Address"] = address_hit.group(1)
     except IndexError:
         pass
 
@@ -500,6 +515,21 @@ def retreiveCropped(num_pages, start=0):
         except Exception as err:
             print("Unknown error: {}".format(err))
             break
+    return res
+
+
+"""Returns a list of image objects
+
+Loads all images in the format [directory]/[naming][i].JPEG into a list and
+returns it.
+"""
+def loadImagesToArray(naming, directory = ""):
+    res = []
+    regex = re.compile(naming + r"\d+.JPEG")
+    for root, dirs, files in os.walk(directory):
+        for f in files:
+            if regex.match(f):
+                res.append(Image.open(directory + "/" + f))
     return res
 
 
