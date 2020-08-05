@@ -31,44 +31,52 @@ def main(naming, directory, AC, part_start=0, part_end=MAX_PARTS):
     directory = os.getcwd() if directory == "" else directory
 
     i = 0
+    f_array = []
     for root, dirs, files in os.walk(directory):
         for f in files:
             m = regex.match(f)
             if m and is_between(part_start, int(m.group(1)), part_end):
                 img = pypdf_ocr.getImagePages(os.path.join(root, f), 1)
+                f_array.append(img["file"])
                 pypdf_ocr.dumpImagePages(img, naming="hin-covers", start=i)
                 pypdf_ocr.cleanupImageOutput(img)
                 i += 1
 
     imagesFolded = {
         "tempdir": None,
-        "images": []
+        "images": [],
+        "files": f_array
     }
 
     imagesFolded["images"] = pypdf_ocr.loadImagesToArray(naming="hin-covers", directory="images")
 
     vals = {
-        "x": [246, 656, 1022, 1384, 1713, 2090],
-        "y": [3048, 3048, 3097, 3097, 3097, 3097],
-        "w": [60, 104, 80, 80, 109, 109],
-        "h": [60, 48, 37, 37, 39, 39]
+        "x": [246, 656, 1022, 1384, 1713, 2090, 2242, 1812, 1800, 1804],
+        "y": [3048, 3048, 3097, 3097, 3097, 3097, 238, 2158, 1602, 2092],
+        "w": [60, 104, 80, 80, 109, 109, 96, 186, 280, 330],
+        "h": [60, 48, 37, 37, 39, 39, 96, 78, 74, 72]
     }
+    
     i = 0
-    for img in imagesFolded["images"]:
-        copy = imagesFolded["images"][0].copy()
-        for j in range(6):        
-            pypdf_ocr.generateCropped(copy, i + j, 
-                vals["x"][j],
-                vals["y"][j],
-                vals["w"][j],
-                vals["h"][j])
-        i += 6
+    for j in range(len(imagesFolded["images"])):
+        copy = imagesFolded["images"][j].copy()
+        for k in range(10):        
+            pypdf_ocr.generateCropped(copy, i + k, 
+                vals["x"][k],
+                vals["y"][k],
+                vals["w"][k],
+                vals["h"][k])
+        i += 10
 
-    
-    print(len(imagesFolded["images"]))
-    
-    cropped_text_pages = pypdf_ocr.extractPagesText(num_pages=len(imagesFolded["images"]) * 6, naming="cropped", language="eng", psm=8,
+    # just extract all the cropped pages to english    
+    cropped_text_pages = pypdf_ocr.extractPagesText(num_pages=len(imagesFolded["images"]) * 10, naming="cropped", language="eng", psm=8,
             clist="tessedit_char_whitelist=0123456789")
+    # loop to replace the right english attempts with hindi
+    for a in range(len(imagesFolded["images"])):
+        hi_crop = pypdf_ocr.extractPagesText(num_pages=2, naming="cropped", language="hin", start=10*a+8, psm=8,
+            clist="tessedit_char_blacklist=॥._")
+        cropped_text_pages[10*a+8]   = hi_crop[0]
+        cropped_text_pages[10*a+8+1] = hi_crop[1]
     
     covers_text_pages = pypdf_ocr.extractPagesText(num_pages=len(imagesFolded["images"]), naming="hin-covers", language="hin", psm=4,
         clist="tessedit_char_blacklist=॥")
@@ -76,15 +84,21 @@ def main(naming, directory, AC, part_start=0, part_end=MAX_PARTS):
     pypdf_ocr.dumpTextPages(pages=covers_text_pages, naming="hin-covers")
     pypdf_ocr.dumpTextPages(pages=cropped_text_pages, naming="cropped")
 
-    i = 0
     pages = []
     dicts = []
-    for page in covers_text_pages:
+    for j in range(len(covers_text_pages)):
+        page = covers_text_pages[j]
         page1 = pypdf_ocr.extractPage1(page)
-        page1["Sanity"] = pypdf_ocr.retreiveCropped(6, start=i)
+        # get it because it's a bunch of crops? lol
+        farm = pypdf_ocr.retreiveCropped(10, start=10*j)
+        page1["Sanity"] = farm[0:6]
+        page1["Part"] = farm[6]
+        page1["Zip Code"] = farm[7]
+        page1["Post Office"] = farm[8]
+        page1["District"] = farm[9]
+        page1["File Name"] = imagesFolded["files"][j]
         dicts.append(page1)
         pages.append(json.dumps(page1, ensure_ascii=False))
-        i += 6
     
     keys = dicts[0].keys()
     with open("output.csv", "w+") as csv_out:
@@ -93,8 +107,8 @@ def main(naming, directory, AC, part_start=0, part_end=MAX_PARTS):
         dict_writer.writerows(dicts)
 
     pypdf_ocr.dumpTextPages(pages, naming="hin-covers", directory="output", extension="json")
-    shutil.rmtree("images")
-    shutil.rmtree("plaintext")
+    # shutil.rmtree("images")
+    # shutil.rmtree("plaintext")
 
 
 if __name__ == "__main__":

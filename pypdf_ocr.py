@@ -22,28 +22,28 @@ import re
 OUTPUT_PAGE_LIMIT = 5
 
 # Regular Expressions
-SEARCH_FAMILY = r"(?:पिता|पति) का नाम\s*(?:४|:|न)?\s*"
+SEARCH_FAMILY = r"(?:पिता|पति) का नाम\s*(?:४|:|न|!|;|\.)?\s*"
 SEARCH_ELECTOR = r"निर्वाचक का नाम\s*"
 SEARCH_ID = r"(BR\/\d{2}\/\d{3}\/\d{6}|[A-Z]{3}\d{7})"
-SEARCH_AGE = r"उम्र\s*(?:४|:|न)?\s*(\d{1,3})"
-SEARCH_HOUSE = r"गृह संख्या\s*(?:४|:|न)?\s*(\d{1,4})"
-SEARCH_SEX = r"लिंग\s*(?:४|:|न)?\s*(महिला|पुरूष)"
+SEARCH_AGE = r"उम्र\s*(?:४|:|न|!|;|\.)?\s*(\d{1,3})"
+SEARCH_HOUSE = r"गृह संख्या\s*(?:४|:|न|!|;|\.)?\s*(\d{1,4})"
+SEARCH_SEX = r"लिंग\s*(?:४|:|न|!|;|\.)?\s*(महिला|पुरूष)"
 
 SEARCH_AC = r"विधान सभा क्षेत्र की संख्या\s*,\s*नाम व आरक्षण स्थिति\s*:\s*(\d+)[\s\"&\-'“”‘’?!.:,#*|]*"
-SEARCH_PART = r"संख्या\s*:\s*(\d+)"
+SEARCH_PART = r"संख्या\s*:[\s_\.]*(\d+)"
 SEARCH_PC = r"लोक सभा क्षेत्र की संख्या\s*,\s*नाम व आरक्षण स्थिति\s*:\s*(\d+)[\s\"&\-'“”‘’?!.:,#*|]*"
 SEARCH_SUBPART = r"\(\d\)\s*"
-SEARCH_VILLAGE = r"मुख्य ग्राम\s*(?:४|:|न)?\s*"
-SEARCH_POST_OFFICE = r"डाकघर\s*(?:४|:|न)?\s*"
-SEARCH_POLICE = r"थाना\s*(?:४|:|न)?\s*"
-SEARCH_RAJASVA_HALKA = r"राजस्व हलका\s*(?:४|:|न)?\s*((?:\d{3})+)"
-SEARCH_PANCHAYAT = r"पंचायत\s*(?:४|:|न)?\s*"
-SEARCH_ANCHAL = r"अंचल ु\s*(?:४|:|न)?\s*"
-SEARCH_PRAKHAND = r"प्रखंड\s*(?:४|:|न)?\s*"
-SEARCH_ANUMANDAL = r"अनूमंडल\s*(?:४|:|न)?\s*"
-SEARCH_DISTRICT = r"जिला\s*(?:४|:|न)?\s*"
-SEARCH_ZIP = r"पिन कोड\s*(?:४|:|न)?\s*\.*\s*(\d{6})"
-SEARCH_POLLING_BOOTH = r"मतदान केन्द्र की संख्या व नाम\s*(?:४|:|न)?\s*\d+[.,\s]*"
+SEARCH_VILLAGE = r"मुख्य ग्राम\s*(?:४|:|न|!|;|\.)?\s*"
+SEARCH_POST_OFFICE = r"डाकघर\s*(?:४|:|न|!|;|\.)?\s*"
+SEARCH_POLICE = r"(?:थाना|आताः)\s*(?:४|:|न|!|;|\.)?[\s\.]*"
+SEARCH_RAJASVA_HALKA = r"राजस्व हलका\s*(?:४|:|न|!|;|\.)?\s*((?:\d{3})+)"
+SEARCH_PANCHAYAT = r"पंचायत\s*(?:४|:|न|!|;|\.)?\s*"
+SEARCH_ANCHAL = r"अंचल ु?\s*(?:४|:|न|!|;|\.)?[\s\.]*"
+SEARCH_PRAKHAND = r"प्रखंड\s*(?:४|:|न|!|;|\.)?[\s\.]*"
+SEARCH_ANUMANDAL = r"अनूमंडल\s*(?:४|:|न|!|;|\.)?\s*"
+SEARCH_DISTRICT = r"जिला\s*(?:४|:|न|!|;|\.)?[\s\.]*"
+SEARCH_ZIP = r"पिन कोड\s*(?:४|:|न|!|;|\.)?[\s\.]*(\d{6})"
+SEARCH_POLLING_BOOTH = r"मतदान केन्द्र की संख्या व नाम\s*(?:४|:|न|!|;|\.)?\s*\d+[.,\s]*"
 SEARCH_POLLING_ADDR = r"मतदान केन्द्र का भवन व पता\s*"
 
 
@@ -77,25 +77,28 @@ class Token:
     def getData(self):
         return self.getData
 
-"""Returns a temporary directory filled with processed images and PIL Image
-objects.
+"""Returns a temporary directory filled with processed images, PIL Image
+objects, and the original file name.
 
-Takes in the path to the pdf to process, and icnreases
+Takes in the path to the pdf to process and the page of the PDF to stop at
+to process, as well as the start. Not limit does NOT act like max_pages
+in other functions. If start > max_pages, the function returns an empty
+list.
 """
-def getImagePages(path, limit=0):
+def getImagePages(path, limit=0, start=0):
     global OUTPUT_PAGE_LIMIT
 
     dir = tempfile.TemporaryDirectory(dir = os.getcwd())
     res = []
     pdf = PdfFileReader(open(path,'rb'))
     max_pages = pdf.getNumPages() if limit <= 0 else limit
-    for page in range(0, max_pages, OUTPUT_PAGE_LIMIT):
+    for page in range(start, max_pages, OUTPUT_PAGE_LIMIT):
         res += convert_from_path(path,
                                  dpi=300,
                                  first_page = page,
                                  last_page = min(page + OUTPUT_PAGE_LIMIT - 1, max_pages),
                                  output_folder = dir.name)
-    return {"tempdir": dir, "images": res}
+    return {"tempdir": dir, "images": res, "file": path}
 
 
 """Returns None
@@ -126,14 +129,16 @@ def dumpImagePages(pages_obj, naming="page", start=0):
 Save a list of raw text to a list of plaintext files in plaintext/namingX.text
 The extension is adjustable with the extension parameter.
 """
-def dumpTextPages(pages, naming="page", directory="plaintext", extension="txt"):
+def dumpTextPages(pages, start=0, naming="page", directory="plaintext", extension="txt"):
     try:
         os.makedirs(directory)
     except FileExistsError:
         print("INFO: {} already exists. Continuing...".format(directory))
-    for i in range(len(pages)):
-        writefile = open(directory + "/" + naming + str(i) + "." + extension, "w+")
-        writefile.write(pages[i])
+    for i in range(start, start + len(pages)):
+        fn = directory + "/" + naming + str(i) + "." + extension
+        print(fn)
+        writefile = open(fn, "w+")
+        writefile.write(pages[i - start])
         writefile.close()
 
 
@@ -142,11 +147,11 @@ def dumpTextPages(pages, naming="page", directory="plaintext", extension="txt"):
 Takes a list of images and returns one string of text per page in a list.
 Looks for images in "folder" named "naming"X."extension" until num_pages -1.
 """
-def extractPagesText(folder="images", naming="page", extension="JPEG", language='eng', num_pages=1, clist="", psm=3):
+def extractPagesText(folder="images", naming="page", extension="JPEG", language='eng', num_pages=1, start=0, clist="", psm=3):
     clist = "-c " + clist if clist != "" else clist
     print("Performing language {}".format(language))
     res = []
-    for i in range(num_pages):
+    for i in range(start, start + num_pages):
         filename = folder + "/" + naming + str(i) + "." + extension
         text = str(((pytesseract.image_to_string(Image.open(filename), 
             lang=language, config='--psm ' + str(psm) + " " + clist))))
@@ -331,8 +336,8 @@ def extractPage1(page_one_text):
     SEARCH_PRAKHAND_STR = SEARCH_PRAKHAND + r"([" + alphanum + r"]+)"
     SEARCH_ANUMANDAL_STR = SEARCH_ANUMANDAL + r"([" + alpha_ + r"]+)"
     SEARCH_DISTRICT_STR = SEARCH_DISTRICT + r"([" + alpha_ + r"]+)"
-    SEARCH_POLLING_BOOTH_STR = SEARCH_POLLING_BOOTH + r"([" + alpha_ + r"]+\s*,\s*[" + alpha_ + r"]+)"
-    SEARCH_POLLING_ADDR_STR = SEARCH_POLLING_ADDR + r"([" + alpha_ + r"]+\s*(?:,|\.)\s*[" + alpha + r"]+)"
+    SEARCH_POLLING_BOOTH_STR = SEARCH_POLLING_BOOTH + r"([" + alpha_ + r"]+\s*(?:,|\.)?\s*[" + alpha_ + r"]+)"
+    SEARCH_POLLING_ADDR_STR = SEARCH_POLLING_ADDR + r"([" + alpha_ + r"]+\s*(?:,|\.)?\s*[" + alpha + r"]+)"
 
     # these ones don't change
     SEARCH_ZIP_STR = SEARCH_ZIP
@@ -358,6 +363,7 @@ def extractPage1(page_one_text):
 
     # make the result
     res = {
+        "File Name": None,
         "Assembly Constituency": None,
         "Part": None,
         "Parlimentary Constituency": None,
@@ -520,19 +526,27 @@ def retreiveCropped(num_pages, start=0):
 
 """Returns a list of image objects
 
-Loads all images in the format [directory]/[naming][i].JPEG into a list and
-returns it.
+Reads images in the format [directory]/naming[i].JPEG until an exception is found.
+Reads from i=start. This is less powerful than a regex search but it preserves the order
+the files were processed in originally, which is needed.
 """
-def loadImagesToArray(naming, directory = ""):
+def loadImagesToArray(naming, directory="", start=0):
     res = []
-    regex = re.compile(naming + r"\d+.JPEG")
-    for root, dirs, files in os.walk(directory):
-        for f in files:
-            if regex.match(f):
-                res.append(Image.open(directory + "/" + f))
+    i = 0
+    while(True):
+        try:
+            res.append(Image.open(directory + "/" + naming + str(i) + ".JPEG"))
+            i += 1
+        except Exception as err:
+            print("Reached end of {} ({} files) with {}".format(naming, i, err))
+            print("This is probably okay!")
+            break
+
     return res
 
 
+"""Disorganized, more for testing to make sure things work
+"""
 if __name__ == "__main__":
     #print("Running LoremIpsum.pdf")
     #lorem_ipsum_pages = getImagePages("test_files/LoremIpsum.pdf")
@@ -557,21 +571,23 @@ if __name__ == "__main__":
 
     # generating cropped values
     vals = {
-        "x": [246, 656, 1022, 1384, 1713, 2090],
-        "y": [3048, 3048, 3097, 3097, 3097, 3097],
-        "w": [60, 104, 80, 80, 109, 109],
-        "h": [60, 48, 37, 37, 39, 39]
+        "x": [246, 656, 1022, 1384, 1713, 2090, 2242, 1812, 1800, 1804],
+        "y": [3048, 3048, 3097, 3097, 3097, 3097, 238, 2158, 1602, 2092],
+        "w": [60, 104, 80, 80, 109, 109, 96, 186, 280, 330],
+        "h": [60, 48, 37, 37, 39, 39, 96, 78, 74, 72]
     }
     copy = hindi_pages["images"][0].copy()
-    for i in range(6):        
+    for i in range(10):        
         generateCropped(copy, i, 
             vals["x"][i],
             vals["y"][i],
             vals["w"][i],
             vals["h"][i])
 
-    cropped_text_pages = extractPagesText(num_pages=6, naming="cropped", language="eng", psm=8,
+    cropped_text_pages = extractPagesText(num_pages=8, naming="cropped", language="eng", psm=8,
         clist="tessedit_char_whitelist=0123456789")
+    cropped_text_pages_hi = extractPagesText(num_pages=2, naming="cropped", language="hin", start=8, psm=8,
+        clist="tessedit_char_blacklist=॥._")
     
     # cleanupImageOutput(lorem_ipsum_pages)
     # cleanupImageOutput(english_pages)
@@ -580,11 +596,25 @@ if __name__ == "__main__":
     dumpTextPages(hin_text_pages, naming="hin-page")
     dumpTextPages(en_text_text_pages, naming="ehin-page")
     dumpTextPages(cropped_text_pages, naming="cropped")
+    dumpTextPages(cropped_text_pages_hi, start=8, naming="cropped")
 
 
+    # the first 6 (0-5) values are the values at the bottom of the page
+    # the rest array is enumerated as follows
+    #     6: part
+    #     7: zip code
+    #     8: post office
+    #     9: district
     print("Parsing page 1...")
     page1 = extractPage1(hin_text_pages[0])
-    page1["Sanity"] = retreiveCropped(6)
+    crop_collection = retreiveCropped(10)
+    print(crop_collection)
+    page1["Sanity"] = crop_collection[0:6]
+    page1["Part"] = crop_collection[6]
+    page1["Zip Code"] = crop_collection[7]
+    page1["Post Office"] = crop_collection[8]
+    page1["District"] = crop_collection[9]
+    page1["File Name"] = hindi_pages["file"]
     page1str = json.dumps(page1, ensure_ascii=False)
 
     print(page1str)
