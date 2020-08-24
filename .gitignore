@@ -5,4 +5,6 @@ DRAFT_*/*
 output/*
 *.zip
 *.csv
+*.xlsx
 .~lock*
+global_values.py
