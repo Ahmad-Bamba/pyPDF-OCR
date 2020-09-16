@@ -115,19 +115,19 @@ def cleanupImageOutput(images_obj):
 Saves a list of images to 'images/namingX.JPEG' where X is the 0 indexed page
 number.
 """
-def dumpImagePages(pages_obj, naming='page', start=0):
+def dumpImagePages(pages_obj, naming='page', start=0, directory='images'):
     try:
-        os.makedirs('images')
+        os.makedirs(directory)
     except FileExistsError:
-        # print('INFO: images/ already exits. Continuing...')
+        # print('INFO: {}/ already exits. Continuing...'.format(directory))
         pass
     for i in range(len(pages_obj['images'])):
-        pages_obj['images'][i].save('images/' + naming + str(i + start) + '.JPEG', 'JPEG')
+        pages_obj['images'][i].save('{}/'.format(directory) + naming + str(i + start) + '.JPEG', 'JPEG')
 
 
 """Returns None
 
-Save a list of raw text to a list of plaintext files in plaintext/namingX.text
+Save a list of raw text to a list of plaintext files in plaintext/namingX.txt
 The extension is adjustable with the extension parameter.
 """
 def dumpTextPages(pages, start=0, naming='page', directory='plaintext', extension='txt'):
@@ -147,14 +147,14 @@ def dumpTextPages(pages, start=0, naming='page', directory='plaintext', extensio
 """Returns list of strings
 
 Takes a list of images and returns one string of text per page in a list.
-Looks for images in 'folder' named 'naming'X.'extension' until num_pages -1.
+Looks for images in 'directory' named 'naming'X.'extension' until num_pages -1.
 """
-def extractPagesText(folder='images', naming='page', extension='JPEG', language='eng', num_pages=1, start=0, clist='', psm=3):
+def extractPagesText(directory='images', naming='page', extension='JPEG', language='eng', num_pages=1, start=0, clist='', psm=3):
     clist = '-c ' + clist if clist != '' else clist
     # ('Performing language {}'.format(language))
     res = []
     for i in range(start, start + num_pages):
-        filename = folder + '/' + naming + str(i) + '.' + extension
+        filename = directory + '/' + naming + str(i) + '.' + extension
         text = str(((pytesseract.image_to_string(Image.open(filename), 
             lang=language, config='--psm ' + str(psm) + ' ' + clist))))
         res.append(text)
@@ -423,14 +423,14 @@ def extractPage1(page_one_text):
     try:
         post_office_hit = re.search(post_office_pattern, page_one_text)
         if post_office_hit is not None:
-            res['Post Office'] = post_office_hit.group(1)
+            res['Post Office'] = post_office_hit.group(1).rstrip('\n')
     except IndexError:
         pass
 
     try:
         police_station_hit = re.search(police_pattern, page_one_text)
         if police_station_hit is not None:
-            res['Police Station'] = police_station_hit.group(1)
+            res['Police Station'] = police_station_hit.group(1).rstrip('\n')
     except IndexError:
         pass
 
@@ -479,14 +479,14 @@ def extractPage1(page_one_text):
     try:
         polling_hit = re.search(polling_pattern, page_one_text)
         if polling_hit is not None:
-            res['Polling Booth'] = polling_hit.group(1)
+            res['Polling Booth'] = polling_hit.group(1).rstrip('\n')
     except IndexError:
         pass
 
     try:
         address_hit = re.search(address_pattern, page_one_text)
         if address_hit is not None:
-            res['Polling Address'] = address_hit.group(1)
+            res['Polling Address'] = address_hit.group(1).rstrip('\n')
     except IndexError:
         pass
 
@@ -499,9 +499,9 @@ def extractPage1(page_one_text):
 Expects a single PIL image and an index and saves a cropped version of the
 image to images/cropped[i].JPEG
 """
-def generateCropped(img, i, x, y, w, h):
+def generateCropped(img, i, x, y, w, h, directory='images'):
     cropped = img.crop((x, y, x + w, y + h))
-    cropped.save('images/cropped{}.JPEG'.format(i))
+    cropped.save('{0}/cropped{1}.JPEG'.format(directory, i))
 
 
 """Returns a list
@@ -509,11 +509,11 @@ def generateCropped(img, i, x, y, w, h):
 Tries to look for [num_pages] filed named plaintext/cropped[i].txt
 and returns a list of the values each page contains.
 """
-def retreiveCropped(num_pages, start=0):
+def retreiveCropped(num_pages, start=0, directory='plaintext'):
     res = []
     for i in range(start, start + num_pages):
         try:
-            f = open('plaintext/cropped{}.txt'.format(i))
+            f = open('{0}/cropped{1}.txt'.format(directory, i))
             fstr = f.read()
             try:
                 res.append(int(fstr))
