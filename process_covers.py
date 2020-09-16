@@ -1,6 +1,7 @@
 import pypdf_ocr
 import argparse
 import shutil
+import errno
 import json
 import csv
 import sys
@@ -27,6 +28,9 @@ def foldImages(list_of_images):
 # files that fit this format. Otherwise, it
 # will process at most X many 
 def main(naming, directory, AC, part_start=0, part_end=MAX_PARTS, instance=0):
+    if not os.path.exists(directory):
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), directory)
+
     images_dir = 'images' if instance == 0 else 'images{}'.format(instance)
     plaintext_dir = 'plaintext' if instance == 0 else 'plaintext{}'.format(instance)
 
